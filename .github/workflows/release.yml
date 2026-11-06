@@ -1,0 +1,48 @@
+# Push a tag like v0.1.0 to publish the plugin tarballs and install.sh.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: |
+          sh build.sh linux-x86_64 dist/rex-paste-linux-x86_64
+          sh build.sh linux-aarch64 dist/rex-paste-linux-aarch64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/
+  macos:
+    runs-on: macos-26 # arm64, macOS 26 SDK
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: brew install libpng webp
+      - run: sh build.sh macos-aarch64 dist/rex-paste-macos-aarch64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/
+  publish:
+    needs: [linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: sh .github/package.sh "$GITHUB_REF_NAME" dist release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --generate-notes

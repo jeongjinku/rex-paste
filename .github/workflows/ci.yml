@@ -1,0 +1,41 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: sh build.sh
+      - run: python3 test/binary_test.py
+      # The Lua tests mock the servers, so the rex CLI on Linux covers them for every platform.
+      - run: curl -fsSL https://pkgs.superlogical.com/rex/install.sh | sh -s -- --tarball
+      - run: rex do test/actions_test.lua
+      - run: sudo apt-get install -y lua-check && luacheck .
+      - name: Package and install a release from local files
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp bin/rex-paste "$RUNNER_TEMP/bin/rex-paste-linux-$(uname -m)"
+          sh .github/package.sh v0.0.0 "$RUNNER_TEMP/bin" "$RUNNER_TEMP/release"
+          sed -i "s|^url=.*|url=file://$RUNNER_TEMP/release|" "$RUNNER_TEMP/release/install.sh"
+          HOME="$RUNNER_TEMP/home" sh "$RUNNER_TEMP/release/install.sh"
+          test "$(cat "$RUNNER_TEMP/home/.config/rex/rex-paste/VERSION")" = v0.0.0
+          "$RUNNER_TEMP/home/.config/rex/rex-paste/bin/rex-paste" lookup "$(printf '0%.0s' $(seq 64))"
+  macos:
+    runs-on: macos-26 # arm64, macOS 26 SDK
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: brew install libpng webp
+      - run: sh build.sh
+      - run: python3 test/binary_test.py
+      - run: sh test/clipboard_test.sh

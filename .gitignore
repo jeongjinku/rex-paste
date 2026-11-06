@@ -1,0 +1,7 @@
+bin/
+dist/
+/.zig-cache/
+__pycache__/
+*.pyc
+.DS_Store
+/VERSION
